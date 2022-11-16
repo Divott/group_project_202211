@@ -14,8 +14,7 @@ import numpy as np
 import dataloader_clothing1M as dataloader
 from sklearn.mixture import GaussianMixture
 
-from create_miniset import load_df_mini
-from config import get_variables
+from config import get_variables, load_df_mini
 num_class, train_set_path, validation_set_path, image_path_prefix, train_number, validation_number, dataset_mean, dataset_std = get_variables()
 
 
