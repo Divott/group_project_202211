@@ -1,7 +1,7 @@
 from torch.utils.data import Dataset, DataLoader
 import torchvision.transforms as transforms
 from PIL import Image
-from config import load_df_mini
+from config import load_df_mini, img_loader
 
 
 class dataset(Dataset):
@@ -51,7 +51,7 @@ class dataset(Dataset):
         if self.mode == 'labeled':
             img_path = self.image_path_prefix + '/' + self.train_imgs[index]
             target = self.train_labels[index]
-            image = Image.open(img_path).convert('RGB')
+            image = img_loader(img_path)
             x = self.x_train[index]
             y = self.y_train[index]
             w = self.w_train[index]
@@ -62,7 +62,7 @@ class dataset(Dataset):
             return img1, img2, target
         elif self.mode == 'unlabeled':
             img_path = self.image_path_prefix + '/' + self.train_imgs[index]
-            image = Image.open(img_path).convert('RGB')
+            image = img_loader(img_path)
             x = self.x_train[index]
             y = self.y_train[index]
             w = self.w_train[index]
@@ -74,18 +74,18 @@ class dataset(Dataset):
         elif self.mode == 'all':
             img_path = self.image_path_prefix + '/' + self.train_imgs[index]
             target = self.train_labels[index]
-            image = Image.open(img_path).convert('RGB')
+            image = img_loader(img_path)
             x = self.x_train[index]
             y = self.y_train[index]
             w = self.w_train[index]
             h = self.h_train[index]
             image = image.crop((x, y, x + w, y + h))
             img = self.transform(image)
-            return img, target, img_path
+            return img, target
         elif self.mode == 'test':
             img_path = self.image_path_prefix + '/' + self.test_imgs[index]
             target = self.test_labels[index]
-            image = Image.open(img_path).convert('RGB')
+            image = img_loader(img_path)
             x = self.x_test[index]
             y = self.y_test[index]
             w = self.w_test[index]
@@ -145,7 +145,7 @@ class dataloader():
                 num_workers=self.num_workers)
             return warm_up_loader
         elif mode == 'train':
-            labeled_dataset = dataset(mode=mode, transform=self.transform_train,
+            labeled_dataset = dataset(mode='labeled', transform=self.transform_train,
                                       num_class=self.num_class, train_set_path=self.train_set_path,
                                       validation_set_path=self.validation_set_path,
                                       image_path_prefix=self.image_path_prefix,
@@ -155,7 +155,7 @@ class dataloader():
                 batch_size=self.batch_size,
                 shuffle=True,
                 num_workers=self.num_workers)
-            unlabeled_dataset = dataset(mode=mode, transform=self.transform_train,
+            unlabeled_dataset = dataset(mode='unlabeled', transform=self.transform_train,
                                         num_class=self.num_class, train_set_path=self.train_set_path,
                                         validation_set_path=self.validation_set_path,
                                         image_path_prefix=self.image_path_prefix,
@@ -186,7 +186,7 @@ class dataloader():
                                    train_number=self.train_number, validation_number=self.validation_number)
             test_loader = DataLoader(
                 dataset=test_dataset,
-                batch_size=500,
+                batch_size=self.batch_size*2,
                 shuffle=False,
                 num_workers=self.num_workers)
             return test_loader

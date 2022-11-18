@@ -56,14 +56,14 @@ def plot_train_loss(train_loss: np.array, epoch: int):
 # plot_train_loss(y, 0)
 
 
-def plot_test_loss(test_loss: np.array, epoch: int):
+def plot_test_loss(test_loss: np.array):
     num_steps = np.arange(len(test_loss))
     plt.plot(num_steps, test_loss)
-    plt.title("Test loss in epoch %s" % str(epoch))
-    plt.xlabel("Steps")
+    plt.title("Test loss")
+    plt.xlabel("Epoch")
     plt.ylabel("Loss")
-    plt.savefig("/home/tangb_lab/cse30013027/zmj/checkpoint/images/%s/Test loss in epoch %s.png" %
-                (str(epoch), str(epoch)))
+    plt.savefig(
+        "/home/tangb_lab/cse30013027/zmj/checkpoint/images/Test loss.png")
     # plt.savefig('test_plotter.png')
     plt.close()
 
@@ -99,7 +99,7 @@ def plot_loss_num(loss_num: np.array, epoch: int, cls: int):
     # loss_num = (loss - loss_min) / (loss_max - loss_min), the distribution is divided by 1%
     exp_classes = ['Neutral', 'Happy', 'Sad', 'Surprise',
                    'Fear', 'Disgust', 'Anger', 'Contempt', 'All']
-    indices = np.arange(100)
+    indices = np.arange(101)
     plt.bar(indices, loss_num, color='maroon',
             width=0.8)
     plt.xlabel("Loss distribution(%)")
@@ -111,8 +111,8 @@ def plot_loss_num(loss_num: np.array, epoch: int, cls: int):
     plt.close()
 
 
-# y = np.zeros(100)
-# for i in range(100):
+# y = np.zeros(101)
+# for i in range(101):
 #     y[i] = i+1
 # plot_loss_num(y, 0, 1)
 
@@ -120,7 +120,7 @@ def plot_loss_num(loss_num: np.array, epoch: int, cls: int):
 def plot_prob_num(prob_num: np.array, epoch: int, cls: int):
     exp_classes = ['Neutral', 'Happy', 'Sad', 'Surprise',
                    'Fear', 'Disgust', 'Anger', 'Contempt', 'All']
-    indices = np.arange(100)
+    indices = np.arange(101)
     plt.bar(indices, prob_num, color='maroon',
             width=0.4)
     plt.xlabel("Prob distribution(%)")
@@ -132,7 +132,7 @@ def plot_prob_num(prob_num: np.array, epoch: int, cls: int):
     plt.close()
 
 
-# y = np.zeros(100)
-# for i in range(100):
+# y = np.zeros(101)
+# for i in range(101):
 #     y[i] = 100*i
 # plot_loss_num(y, 0, 2)
