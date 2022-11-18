@@ -2,7 +2,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sn
 import pandas as pd
-import matplotlib.ticker as ticker
 
 
 # At each epoch you need to mkdir str(epoch) in image/
@@ -38,14 +37,14 @@ import matplotlib.ticker as ticker
 # plt.show()
 
 
-def plot_train_loss(train_loss: np.array, epoch: int):
+def plot_train_loss(train_loss: np.array, epoch: int, model_code: int):
     num_steps = np.arange(len(train_loss))
     plt.plot(num_steps, train_loss)
-    plt.title("Train loss in epoch %s" % str(epoch))
+    plt.title("Train loss in epoch %s(net %s)" % (str(epoch), str(model_code)))
     plt.xlabel("Steps")
     plt.ylabel("Loss")
-    plt.savefig("/home/tangb_lab/cse30013027/zmj/checkpoint/images/%s/Train loss in epoch %s.png" %
-                (str(epoch), str(epoch)))
+    plt.savefig("/home/tangb_lab/cse30013027/zmj/checkpoint/images/%s/Train loss in epoch %s(net %s).png" %
+                (str(epoch), str(epoch), str(model_code)))
     # plt.savefig('test_plotter.png')
     plt.close()
 
@@ -81,7 +80,7 @@ def plot_confusion_matrix(confusion_matrix: np.array, epoch: int):
                          columns=exp_classes)
     plt.figure()
     plt.title("Confusion matrix in epoch %s" % str(epoch))
-    sn.heatmap(df_cm, annot=True)
+    sn.heatmap(df_cm, annot=True, fmt='g')
     plt.savefig("/home/tangb_lab/cse30013027/zmj/checkpoint/images/%s/Confusion matrix in epoch %s.png" %
                 (str(epoch), str(epoch)))
     # plt.savefig('test_plotter.png')
@@ -95,7 +94,7 @@ def plot_confusion_matrix(confusion_matrix: np.array, epoch: int):
 # plot_confusion_matrix(y, 0)
 
 
-def plot_loss_num(loss_num: np.array, epoch: int, cls: int):
+def plot_loss_num(loss_num: np.array, epoch: int, cls: int, model_code: int):
     # loss_num = (loss - loss_min) / (loss_max - loss_min), the distribution is divided by 1%
     exp_classes = ['Neutral', 'Happy', 'Sad', 'Surprise',
                    'Fear', 'Disgust', 'Anger', 'Contempt', 'All']
@@ -104,9 +103,10 @@ def plot_loss_num(loss_num: np.array, epoch: int, cls: int):
             width=0.8)
     plt.xlabel("Loss distribution(%)")
     plt.ylabel("Total number")
-    plt.title("Num-loss(%s) in epoch %s" % (exp_classes[cls], str(epoch)))
-    plt.savefig("/home/tangb_lab/cse30013027/zmj/checkpoint/images/%s/Num-loss(%s) in epoch %s.png" %
-                (str(epoch), exp_classes[cls], str(epoch)))
+    plt.title("Num-loss(%s) in epoch %s(net %s)" %
+              (exp_classes[cls], str(epoch), str(model_code)))
+    plt.savefig("/home/tangb_lab/cse30013027/zmj/checkpoint/images/%s/Num-loss(%s) in epoch %s(net %s).png" %
+                (str(epoch), exp_classes[cls], str(epoch), str(model_code)))
     # plt.savefig('test_plotter.png')
     plt.close()
 
@@ -117,7 +117,7 @@ def plot_loss_num(loss_num: np.array, epoch: int, cls: int):
 # plot_loss_num(y, 0, 1)
 
 
-def plot_prob_num(prob_num: np.array, epoch: int, cls: int):
+def plot_prob_num(prob_num: np.array, epoch: int, cls: int, model_code: int):
     exp_classes = ['Neutral', 'Happy', 'Sad', 'Surprise',
                    'Fear', 'Disgust', 'Anger', 'Contempt', 'All']
     indices = np.arange(101)
@@ -125,9 +125,10 @@ def plot_prob_num(prob_num: np.array, epoch: int, cls: int):
             width=0.4)
     plt.xlabel("Prob distribution(%)")
     plt.ylabel("Total number")
-    plt.title("Num-prob(%s) in epoch %s" % (exp_classes[cls], str(epoch)))
-    plt.savefig("/home/tangb_lab/cse30013027/zmj/checkpoint/images/%s/Num-prob(%s) in epoch %s.png" %
-                (str(epoch), exp_classes[cls], str(epoch)))
+    plt.title("Num-prob(%s) in epoch %s(net %s)" %
+              (exp_classes[cls], str(epoch), str(model_code)))
+    plt.savefig("/home/tangb_lab/cse30013027/zmj/checkpoint/images/%s/Num-prob(%s) in epoch %s(net %s).png" %
+                (str(epoch), exp_classes[cls], str(epoch), str(model_code)))
     # plt.savefig('test_plotter.png')
     plt.close()
 
