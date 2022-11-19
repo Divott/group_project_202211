@@ -1,13 +1,13 @@
 from torch.utils.data import Dataset, DataLoader
 import torchvision.transforms as transforms
 from PIL import Image
-from config import load_df_mini, img_loader
+from config import load_df_mini
 
 
 class dataset(Dataset):
     def __init__(self, mode, transform, num_class, train_set_path,
                  validation_set_path, image_path_prefix, train_number,
-                 validation_number, pred=[]):
+                 validation_number, pred=[], prob=[]):
         self.mode = mode
         self.transform = transform
         self.image_path_prefix = image_path_prefix
@@ -36,6 +36,7 @@ class dataset(Dataset):
             train_imgs = df_train['subDirectory_filePath'].values.flatten()
             pred_idx = pred.nonzero()[0]
             self.train_imgs = [train_imgs[i] for i in pred_idx]
+            self.prob = [prob[i] for i in pred_idx]
             print("%s data has a size of %d" %
                   (self.mode, len(self.train_imgs)))
         elif self.mode == "unlabeled":
@@ -51,7 +52,8 @@ class dataset(Dataset):
         if self.mode == 'labeled':
             img_path = self.image_path_prefix + '/' + self.train_imgs[index]
             target = self.train_labels[index]
-            image = img_loader(img_path)
+            w = self.prob[index]
+            image = Image.open(img_path).convert('RGB')
             x = self.x_train[index]
             y = self.y_train[index]
             w = self.w_train[index]
@@ -59,10 +61,10 @@ class dataset(Dataset):
             image = image.crop((x, y, x + w, y + h))
             img1 = self.transform(image)
             img2 = self.transform(image)
-            return img1, img2, target
+            return img1, img2, target, w
         elif self.mode == 'unlabeled':
             img_path = self.image_path_prefix + '/' + self.train_imgs[index]
-            image = img_loader(img_path)
+            image = Image.open(img_path).convert('RGB')
             x = self.x_train[index]
             y = self.y_train[index]
             w = self.w_train[index]
@@ -74,7 +76,7 @@ class dataset(Dataset):
         elif self.mode == 'all':
             img_path = self.image_path_prefix + '/' + self.train_imgs[index]
             target = self.train_labels[index]
-            image = img_loader(img_path)
+            image = Image.open(img_path).convert('RGB')
             x = self.x_train[index]
             y = self.y_train[index]
             w = self.w_train[index]
@@ -85,7 +87,7 @@ class dataset(Dataset):
         elif self.mode == 'test':
             img_path = self.image_path_prefix + '/' + self.test_imgs[index]
             target = self.test_labels[index]
-            image = img_loader(img_path)
+            image = Image.open(img_path).convert('RGB')
             x = self.x_test[index]
             y = self.y_test[index]
             w = self.w_test[index]
@@ -131,7 +133,7 @@ class dataloader():
         ])
         # maybe there are other kinds of transforms waited to be added
 
-    def run(self, mode, pred=[]):
+    def run(self, mode, pred=[], prob=[]):
         if mode == 'warm_up':
             warm_up_dataset = dataset(mode='all', transform=self.transform_train,
                                       num_class=self.num_class, train_set_path=self.train_set_path,
@@ -149,7 +151,7 @@ class dataloader():
                                       num_class=self.num_class, train_set_path=self.train_set_path,
                                       validation_set_path=self.validation_set_path,
                                       image_path_prefix=self.image_path_prefix,
-                                      train_number=self.train_number, validation_number=self.validation_number, pred=pred)
+                                      train_number=self.train_number, validation_number=self.validation_number, pred=pred, prob=prob)
             labeled_loader = DataLoader(
                 dataset=labeled_dataset,
                 batch_size=self.batch_size,

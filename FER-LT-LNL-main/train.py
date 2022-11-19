@@ -8,37 +8,65 @@ import random
 import numpy as np
 import dataloader as dataloader
 from sklearn.mixture import GaussianMixture
-from config import get_variables
-import multiprocessing as mp
 import plotter
 import os
 from tqdm import tqdm
+import argparse
 
 
-data = get_variables()
-num_class = data['num_class']
-train_set_path = data['train_set_path']
-validation_set_path = data['validation_set_path']
-image_path_prefix = data['image_path_prefix']
-train_number = data['train_number']
-validation_number = data['validation_number']
-resize = data['resize']
-crop = data['crop']
-dataset_mean = data['dataset_mean']
-dataset_std = data['dataset_std']
-seed = data['seed']
-threshold_ini = data['threshold']
-batch_size = data['batch_size']
-num_workers = data['num_workers']
-lr = data['lr']
-num_epochs = data['num_epochs']
-model_ini_path = data['model_ini_path']
+parser = argparse.ArgumentParser(description='PyTorch CIFAR Training')
+parser.add_argument('--num_class', default=8, type=int)
+parser.add_argument('--train_set_path',
+                    default='/home/tangb_lab/cse30013027/Data/AffectNet/aligned_affectnet_train.csv', type=str)
+parser.add_argument('--validation_set_path',
+                    default='/home/tangb_lab/cse30013027/Data/AffectNet/aligned_affectnet_test.csv', type=str)
+parser.add_argument('--image_path_prefix',
+                    default='/home/tangb_lab/cse30013027/Data/AffectNet/Manually_Annotated_Images_AffectNet', type=str)
+parser.add_argument('--train_number', default=286140, type=int)
+parser.add_argument('--neutral_number', default=74495, type=int)
+parser.add_argument('--happy_number', default=133756, type=int)
+parser.add_argument('--sad_number', default=25309, type=int)
+parser.add_argument('--surprise_number', default=14016, type=int)
+parser.add_argument('--fear_number', default=6322, type=int)
+parser.add_argument('--disgust_number', default=3783, type=int)
+parser.add_argument('--anger_number', default=24725, type=int)
+parser.add_argument('--contempt_number', default=3734, type=int)
+parser.add_argument('--validation_number', default=3998, type=int)
+# parser.add_argument('--train_number', default=800, type=int)
+# parser.add_argument('--neutral_number', default=216, type=int)
+# parser.add_argument('--happy_number', default=368, type=int)
+# parser.add_argument('--sad_number', default=70, type=int)
+# parser.add_argument('--surprise_number', default=49, type=int)
+# parser.add_argument('--fear_number', default=13, type=int)
+# parser.add_argument('--disgust_number', default=13, type=int)
+# parser.add_argument('--anger_number', default=68, type=int)
+# parser.add_argument('--contempt_number', default=3, type=int)
+# parser.add_argument('--validation_number', default=400, type=int)
+parser.add_argument('--resize', default=256, type=int)
+parser.add_argument('--crop', default=224, type=int)
+parser.add_argument(
+    '--dataset_mean', default=(0.5863, 0.4595, 0.4030), type=tuple)
+parser.add_argument(
+    '--dataset_std', default=(0.2715, 0.2424, 0.2366), type=tuple)
+parser.add_argument('--seed', default=123, type=int)
+parser.add_argument(
+    '--threshold_ini', default=[0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8], type=list)
+parser.add_argument('--batch_size', default=32, type=int)
+parser.add_argument('--num_workers', default=0, type=int)
+parser.add_argument('--lr', default=0.002, type=float)
+parser.add_argument('--num_epochs', default=80, type=int)
+parser.add_argument(
+    '--model_ini_path', default='/home/tangb_lab/cse30013027/zmj/checkpoint/model_initial.pth', type=str)
+parser.add_argument('--alpha', default=0.5, type=float)
+parser.add_argument('--lambda_u', default=0, type=float)
+parser.add_argument('--T', default=0.5, type=float)
+args = parser.parse_args()
 
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-random.seed(seed)
-torch.manual_seed(seed)
-torch.cuda.manual_seed_all(seed)
+random.seed(args.seed)
+torch.manual_seed(args.seed)
+torch.cuda.manual_seed_all(args.seed)
 
 # In all of the cases, the data has to be mapped to the device.
 
@@ -50,13 +78,104 @@ torch.cuda.manual_seed_all(seed)
 # Training
 
 
-def train(epoch, net, net2, optimizer, labeled_trainloader, unlabeled_trainloader, model_code):
-    pass
+def train(epoch, net, net2, optimizer, scaler, labeled_trainloader, unlabeled_trainloader, model_code):
+    net.train()
+    net2.eval()  # fix one network and train the other
+
+    unlabeled_train_iter = iter(unlabeled_trainloader)
+    num_iter = (len(labeled_trainloader.dataset) // args.batch_size) + 1
+    loss_plot = np.zeros(num_iter)
+    with torch.cuda.amp.autocast():
+        with tqdm(total=len(labeled_trainloader)) as pbar:
+            for batch_idx, (inputs_x, inputs_x2, labels_x, w_x) in enumerate(labeled_trainloader):
+                pbar.update(len(inputs_x))
+                try:
+                    inputs_u, inputs_u2 = next(unlabeled_train_iter)
+                except:
+                    unlabeled_train_iter = iter(unlabeled_trainloader)
+                    inputs_u, inputs_u2 = next(unlabeled_train_iter)
+                batch_size = inputs_x.size(0)
+
+                # Transform label to one-hot
+                labels_x = torch.zeros(batch_size, args.num_class).scatter_(
+                    1, labels_x.view(-1, 1), 1)
+                w_x = w_x.view(-1, 1).type(torch.FloatTensor)
+
+                inputs_x, inputs_x2, labels_x, w_x = inputs_x.cuda(
+                ), inputs_x2.cuda(), labels_x.cuda(), w_x.cuda()
+                inputs_u, inputs_u2 = inputs_u.cuda(), inputs_u2.cuda()
+
+                with torch.no_grad():
+                    # label co-guessing of unlabeled samples
+                    outputs_u11 = net(inputs_u)
+                    outputs_u12 = net(inputs_u2)
+                    outputs_u21 = net2(inputs_u)
+                    outputs_u22 = net2(inputs_u2)
+
+                    pu = (torch.softmax(outputs_u11, dim=1) + torch.softmax(outputs_u12, dim=1) + torch.softmax(outputs_u21,
+                                                                                                                dim=1) + torch.softmax(
+                        outputs_u22, dim=1)) / 4
+                    ptu = pu ** (1 / args.T)  # temparature sharpening
+
+                    targets_u = ptu / ptu.sum(dim=1, keepdim=True)  # normalize
+                    targets_u = targets_u.detach()
+
+                    # label refinement of labeled samples
+                    outputs_x = net(inputs_x)
+                    outputs_x2 = net(inputs_x2)
+
+                    px = (torch.softmax(outputs_x, dim=1) +
+                          torch.softmax(outputs_x2, dim=1)) / 2
+                    px = w_x * labels_x + (1 - w_x) * px
+                    ptx = px ** (1 / args.T)  # temparature sharpening
+
+                    targets_x = ptx / ptx.sum(dim=1, keepdim=True)  # normalize
+                    targets_x = targets_x.detach()
+
+                    # mixmatch
+                l = np.random.beta(args.alpha, args.alpha)
+                l = max(l, 1 - l)
+
+                all_inputs = torch.cat(
+                    [inputs_x, inputs_x2, inputs_u, inputs_u2], dim=0)
+                all_targets = torch.cat(
+                    [targets_x, targets_x, targets_u, targets_u], dim=0)
+
+                idx = torch.randperm(all_inputs.size(0))
+
+                input_a, input_b = all_inputs, all_inputs[idx]
+                target_a, target_b = all_targets, all_targets[idx]
+
+                mixed_input = l * input_a[:batch_size * 2] + \
+                    (1 - l) * input_b[:batch_size * 2]
+                mixed_target = l * target_a[:batch_size *
+                                            2] + (1 - l) * target_b[:batch_size * 2]
+
+                logits = net(mixed_input)
+
+                Lx = -torch.mean(torch.sum(F.log_softmax(logits, dim=1)
+                                           * mixed_target, dim=1))
+
+                # regularization
+                prior = torch.ones(args.num_class) / args.num_class
+                prior = prior.cuda()
+                pred_mean = torch.softmax(logits, dim=1).mean(0)
+                penalty = torch.sum(prior * torch.log(prior / pred_mean))
+
+                loss = Lx + penalty
+                loss_plot[batch_idx] = loss
+
+                # compute gradient and do SGD step
+                optimizer.zero_grad()
+                scaler.scale(loss).backward()
+                scaler.step(optimizer)
+                scaler.update()
+    plotter.plot_train_loss(loss_plot, epoch, model_code)
 
 
 def warm_up(net, optimizer, scaler, dataloader, epoch, model_code):
     net.train()
-    loss_plot = np.zeros(train_number//(batch_size*2) + 1)
+    loss_plot = np.zeros(args.train_number//(args.batch_size*2) + 1)
     with torch.cuda.amp.autocast():
         with tqdm(total=len(dataloader)) as pbar:
             for batch_idx, (inputs, labels) in enumerate(dataloader):
@@ -79,9 +198,9 @@ def test(net1, net2, test_loader, epoch):
     net2.eval()
     correct = 0
     total = 0
-    losses = torch.zeros(validation_number)
+    losses = torch.zeros(args.validation_number)
     n = 0
-    confusion_matrix = torch.zeros((num_class, num_class))
+    confusion_matrix = torch.zeros((args.num_class, args.num_class))
     with torch.no_grad():
         with torch.cuda.amp.autocast():
             with tqdm(total=len(test_loader)) as pbar:
@@ -105,13 +224,33 @@ def test(net1, net2, test_loader, epoch):
     print("\n| Test Acc: %.2f%%\n" % (acc))
     np_arr = confusion_matrix.detach().cpu().numpy().astype(int)
     plotter.plot_confusion_matrix(np_arr, epoch)
-    return acc, torch.sum(losses)/validation_number
+    return acc, torch.sum(losses)/args.validation_number
 
 
 def eval(epoch, model, eval_loader, model_code):
     model.eval()
-    losses = torch.zeros(train_number)
-    n = 0
+    losses = torch.zeros(args.train_number)
+    loss_dic = {}
+    index = {}
+    loss_dic['0'] = torch.zeros(args.neutral_number)
+    loss_dic['1'] = torch.zeros(args.happy_number)
+    loss_dic['2'] = torch.zeros(args.sad_number)
+    loss_dic['3'] = torch.zeros(args.surprise_number)
+    loss_dic['4'] = torch.zeros(args.fear_number)
+    loss_dic['5'] = torch.zeros(args.disgust_number)
+    loss_dic['6'] = torch.zeros(args.anger_number)
+    loss_dic['7'] = torch.zeros(args.contempt_number)
+    index['0'] = torch.zeros(args.neutral_number)
+    index['1'] = torch.zeros(args.happy_number)
+    index['2'] = torch.zeros(args.sad_number)
+    index['3'] = torch.zeros(args.surprise_number)
+    index['4'] = torch.zeros(args.fear_number)
+    index['5'] = torch.zeros(args.disgust_number)
+    index['6'] = torch.zeros(args.anger_number)
+    index['7'] = torch.zeros(args.contempt_number)
+    n = torch.zeros(args.num_class)
+    p = 0
+    q = 0
     with torch.no_grad():
         with torch.cuda.amp.autocast():
             with tqdm(total=len(eval_loader)) as pbar:
@@ -121,24 +260,45 @@ def eval(epoch, model, eval_loader, model_code):
                     outputs = model(inputs)
                     loss = CE(outputs, targets)
                     for b in range(inputs.size(0)):
-                        losses[n] = loss[b]
-                        n += 1
+                        loss_dic[str(int(targets[b].detach().cpu().numpy()))
+                                 ][n[targets[b].detach().cpu().numpy()].detach().cpu().numpy()] = loss[b]
+                        index[str(int(targets[b].detach().cpu().numpy()))
+                              ][n[targets[b].detach().cpu().numpy()].detach().cpu().numpy()] = p
+                        n[targets[b].detach().cpu().numpy()] += 1
+                        p += 1
+                        losses[q] = loss[b]
+                        q += 1
+
+    prob_total = torch.zeros(args.train_number)
+    for i in range(args.num_class):
+        loss = loss_dic[str(i)]
+        idx = index[str(i)]
+        loss = (loss - losses.min()) / (losses.max() - losses.min())
+        loss = loss.reshape(-1, 1)
+        loss_plot = np.zeros(101)
+        for j in range(len(loss)):
+            loss_plot[(int)(loss[j]*100)] += 1
+        plotter.plot_loss_num(loss_plot, epoch, i, model_code)
+        gmm = GaussianMixture(n_components=2, max_iter=10,
+                              reg_covar=5e-4, tol=1e-2)
+        gmm.fit(loss)
+        prob = gmm.predict_proba(loss)
+        prob = prob[:, gmm.means_.argmin()]
+        for j in range(len(loss)):
+            prob_total[int(idx[j].detach().cpu().numpy())] = prob[j]
+        prob_plot = np.zeros(101)
+        for j in range(len(prob)):
+            prob_plot[(int)(prob[j]*100)] += 1
+        plotter.plot_prob_num(prob_plot, epoch, i, model_code)
+
     losses = (losses - losses.min()) / (losses.max() - losses.min())
     losses = losses.reshape(-1, 1)
     loss_plot = np.zeros(101)
     for i in range(len(losses)):
         loss_plot[(int)(losses[i]*100)] += 1
-    plotter.plot_loss_num(loss_plot, epoch, 8, model_code)
-    gmm = GaussianMixture(n_components=2, max_iter=10,
-                          reg_covar=5e-4, tol=1e-2)
-    gmm.fit(losses)
-    prob = gmm.predict_proba(losses)
-    prob = prob[:, gmm.means_.argmin()]
-    prob_plot = np.zeros(101)
-    for i in range(len(prob)):
-        prob_plot[(int)(prob[i]*100)] += 1
-    plotter.plot_prob_num(prob_plot, epoch, 8, model_code)
-    return prob
+    plotter.plot_loss_num(loss_plot, epoch, args.num_class, model_code)
+
+    return prob_total.detach().cpu().numpy()
 
 
 cudnn.benchmark = True
@@ -147,11 +307,12 @@ cudnn.benchmark = True
 # define models here
 
 
-def create_model(path=model_ini_path):
+def create_model(path=args.model_ini_path):
     model = models.resnet50()
     model.load_state_dict(torch.load(path))
     # resnet50(weights=ResNet50_Weights.DEFAULT)
-    model.fc = nn.Linear(2048, num_class)
+    if path == args.model_ini_path:
+        model.fc = nn.Linear(2048, args.num_class)
     model = nn.DataParallel(model)
     model.to(device)
     return model
@@ -159,7 +320,11 @@ def create_model(path=model_ini_path):
 
 print('| Building net')
 net1 = create_model()
+net1.load_state_dict(torch.load(
+    '/home/tangb_lab/cse30013027/zmj/checkpoint/models/model_1(epoch 0).pth'))
 net2 = create_model()
+net2.load_state_dict(torch.load(
+    '/home/tangb_lab/cse30013027/zmj/checkpoint/models/model_2(epoch 0).pth'))
 
 
 # define losses here
@@ -179,9 +344,9 @@ conf_penalty = NegEntropy()
 # define optimizers here
 
 
-optimizer1 = optim.SGD(net1.parameters(), lr=lr,
+optimizer1 = optim.SGD(net1.parameters(), lr=args.lr,
                        momentum=0.9, weight_decay=1e-3)
-optimizer2 = optim.SGD(net2.parameters(), lr=lr,
+optimizer2 = optim.SGD(net2.parameters(), lr=args.lr,
                        momentum=0.9, weight_decay=1e-3)
 
 scaler1 = torch.cuda.amp.GradScaler()
@@ -191,52 +356,53 @@ scaler2 = torch.cuda.amp.GradScaler()
 # some other modules(e.g. ada_cm) todo here
 
 
-loader = dataloader.dataloader(num_class=num_class, train_set_path=train_set_path, validation_set_path=validation_set_path,
-                               image_path_prefix=image_path_prefix,
-                               train_number=train_number, validation_number=validation_number, resize=resize, crop=crop,
-                               dataset_mean=dataset_mean, dataset_std=dataset_std, batch_size=batch_size, num_workers=num_workers)
+loader = dataloader.dataloader(num_class=args.num_class, train_set_path=args.train_set_path, validation_set_path=args.validation_set_path,
+                               image_path_prefix=args.image_path_prefix,
+                               train_number=args.train_number, validation_number=args.validation_number, resize=args.resize, crop=args.crop,
+                               dataset_mean=args.dataset_mean, dataset_std=args.dataset_std, batch_size=args.batch_size, num_workers=args.num_workers)
 
 
 # the train module
 
 
-loss_paint = np.zeros(num_epochs+1)
-for epoch in range(num_epochs + 1):
+loss_paint = np.zeros(args.num_epochs+1)
+for epoch in range(args.num_epochs + 1):
     print('start epoch' + str(epoch))
     if not os.path.exists("/home/tangb_lab/cse30013027/zmj/checkpoint/images/%s" % str(epoch)):
         os.mkdir("/home/tangb_lab/cse30013027/zmj/checkpoint/images/%s" %
                  str(epoch))
 
     if epoch >= 40:
-        lr /= 10
+        args.lr /= 10
     for param_group in optimizer1.param_groups:
-        param_group['lr'] = lr
+        param_group['lr'] = args.lr
     for param_group in optimizer2.param_groups:
-        param_group['lr'] = lr
+        param_group['lr'] = args.lr
 
-    if epoch < 5:  # warm up
-        train_loader = loader.run('warm_up')
-        print('Warmup Net1')
-        warm_up(net1, optimizer1, scaler1, train_loader, epoch, 1)
-        train_loader = loader.run('warm_up')
-        print('\nWarmup Net2')
-        warm_up(net2, optimizer2, scaler2, train_loader, epoch, 2)
-    else:
-        # pred1 = (prob1 > threshold_ini)  # divide dataset
-        # pred2 = (prob2 > threshold_ini)
-        pred1 = (prob1 > 0.8)
-        pred2 = (prob2 > 0.8)
+    if epoch != 0:
+        if epoch < 5:  # warm up
+            train_loader = loader.run('warm_up')
+            print('Warmup Net1')
+            warm_up(net1, optimizer1, scaler1, train_loader, epoch, 1)
+            train_loader = loader.run('warm_up')
+            print('\nWarmup Net2')
+            warm_up(net2, optimizer2, scaler2, train_loader, epoch, 2)
+        else:
+            # pred1 = (prob1 > threshold_ini)  # divide dataset
+            # pred2 = (prob2 > threshold_ini)
+            pred1 = (prob1 > 0.8)
+            pred2 = (prob2 > 0.8)
 
-        print('\n\nTrain Net1')
-        labeled_trainloader, unlabeled_trainloader = loader.run(
-            'train', pred2)  # co-divide
-        train(epoch, net1, net2, optimizer1, labeled_trainloader,
-              unlabeled_trainloader, 1)  # train net1
-        print('\nTrain Net2')
-        labeled_trainloader, unlabeled_trainloader = loader.run(
-            'train', pred1)  # co-divide
-        train(epoch, net2, net1, optimizer2, labeled_trainloader,
-              unlabeled_trainloader, 2)  # train net2
+            print('\n\nTrain Net1')
+            labeled_trainloader, unlabeled_trainloader = loader.run(
+                'train', pred2, prob2)  # co-divide
+            train(epoch, net1, net2, optimizer1, scaler1, labeled_trainloader,
+                  unlabeled_trainloader, 1)  # train net1
+            print('\nTrain Net2')
+            labeled_trainloader, unlabeled_trainloader = loader.run(
+                'train', pred1, prob1)  # co-divide
+            train(epoch, net2, net1, optimizer2, scaler2, labeled_trainloader,
+                  unlabeled_trainloader, 2)  # train net2
 
     # evaluate training data loss for next epoch
     print('\n==== net 1 evaluate next epoch training data loss ====')
@@ -251,7 +417,7 @@ for epoch in range(num_epochs + 1):
     loss_paint[epoch] = loss
 
     torch.save(net1.state_dict(),
-               '/home/tangb_lab/cse30013027/zmj/checkpoint/model_1(epoch %s).pth' % str(epoch))
+               '/home/tangb_lab/cse30013027/zmj/checkpoint/models/model_1(epoch %s).pth' % str(epoch))
     torch.save(net2.state_dict(),
-               '/home/tangb_lab/cse30013027/zmj/checkpoint/model_2(epoch %s).pth' % str(epoch))
+               '/home/tangb_lab/cse30013027/zmj/checkpoint/models/model_2(epoch %s).pth' % str(epoch))
 plotter.plot_test_loss(loss_paint)
