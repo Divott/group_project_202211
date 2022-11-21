@@ -74,8 +74,10 @@ def plot_test_loss(test_loss: np.array):
 
 
 def plot_confusion_matrix(confusion_matrix: np.array, epoch: int):
+    # exp_classes = ['Neutral', 'Happy', 'Sad', 'Surprise',
+    #                'Fear', 'Disgust', 'Anger', 'Contempt']
     exp_classes = ['Neutral', 'Happy', 'Sad', 'Surprise',
-                   'Fear', 'Disgust', 'Anger', 'Contempt']
+                   'Fear', 'Disgust', 'Anger']
     df_cm = pd.DataFrame(confusion_matrix, index=exp_classes,
                          columns=exp_classes)
     plt.figure()
@@ -96,8 +98,10 @@ def plot_confusion_matrix(confusion_matrix: np.array, epoch: int):
 
 def plot_loss_num(loss_num: np.array, epoch: int, cls: int, model_code: int):
     # loss_num = (loss - loss_min) / (loss_max - loss_min), the distribution is divided by 1%
+    # exp_classes = ['Neutral', 'Happy', 'Sad', 'Surprise',
+    #                'Fear', 'Disgust', 'Anger', 'Contempt', 'All']
     exp_classes = ['Neutral', 'Happy', 'Sad', 'Surprise',
-                   'Fear', 'Disgust', 'Anger', 'Contempt', 'All']
+                   'Fear', 'Disgust', 'Anger', 'All']
     indices = np.arange(101)
     plt.bar(indices, loss_num, color='maroon',
             width=0.8)
@@ -118,8 +122,10 @@ def plot_loss_num(loss_num: np.array, epoch: int, cls: int, model_code: int):
 
 
 def plot_prob_num(prob_num: np.array, epoch: int, cls: int, model_code: int):
+    # exp_classes = ['Neutral', 'Happy', 'Sad', 'Surprise',
+    #                'Fear', 'Disgust', 'Anger', 'Contempt', 'All']
     exp_classes = ['Neutral', 'Happy', 'Sad', 'Surprise',
-                   'Fear', 'Disgust', 'Anger', 'Contempt', 'All']
+                   'Fear', 'Disgust', 'Anger',  'All']
     indices = np.arange(101)
     plt.bar(indices, prob_num, color='maroon',
             width=0.4)

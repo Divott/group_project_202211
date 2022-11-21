@@ -15,14 +15,14 @@ import argparse
 
 
 parser = argparse.ArgumentParser(description='PyTorch CIFAR Training')
-parser.add_argument('--num_class', default=8, type=int)
+parser.add_argument('--num_class', default=7, type=int)
 parser.add_argument('--train_set_path',
                     default='/home/tangb_lab/cse30013027/Data/AffectNet/aligned_affectnet_train.csv', type=str)
 parser.add_argument('--validation_set_path',
                     default='/home/tangb_lab/cse30013027/Data/AffectNet/aligned_affectnet_test.csv', type=str)
 parser.add_argument('--image_path_prefix',
                     default='/home/tangb_lab/cse30013027/Data/AffectNet/Manually_Annotated_Images_AffectNet', type=str)
-parser.add_argument('--train_number', default=286140, type=int)
+parser.add_argument('--train_number', default=282406, type=int)
 parser.add_argument('--neutral_number', default=74495, type=int)
 parser.add_argument('--happy_number', default=133756, type=int)
 parser.add_argument('--sad_number', default=25309, type=int)
@@ -31,8 +31,10 @@ parser.add_argument('--fear_number', default=6322, type=int)
 parser.add_argument('--disgust_number', default=3783, type=int)
 parser.add_argument('--anger_number', default=24725, type=int)
 parser.add_argument('--contempt_number', default=3734, type=int)
-parser.add_argument('--validation_number', default=3998, type=int)
-# parser.add_argument('--train_number', default=800, type=int)
+parser.add_argument('--validation_number', default=3498, type=int)
+parser.add_argument(
+    '--prior', default=[0.2638, 0.4736, 0.0896, 0.0496, 0.0224, 0.014, 0.0875], type=list)
+# parser.add_argument('--train_number', default=797, type=int)
 # parser.add_argument('--neutral_number', default=216, type=int)
 # parser.add_argument('--happy_number', default=368, type=int)
 # parser.add_argument('--sad_number', default=70, type=int)
@@ -40,8 +42,8 @@ parser.add_argument('--validation_number', default=3998, type=int)
 # parser.add_argument('--fear_number', default=13, type=int)
 # parser.add_argument('--disgust_number', default=13, type=int)
 # parser.add_argument('--anger_number', default=68, type=int)
-# parser.add_argument('--contempt_number', default=3, type=int)
-# parser.add_argument('--validation_number', default=400, type=int)
+# # parser.add_argument('--contempt_number', default=3, type=int)
+# parser.add_argument('--validation_number', default=350, type=int)
 parser.add_argument('--resize', default=256, type=int)
 parser.add_argument('--crop', default=224, type=int)
 parser.add_argument(
@@ -50,7 +52,7 @@ parser.add_argument(
     '--dataset_std', default=(0.2715, 0.2424, 0.2366), type=tuple)
 parser.add_argument('--seed', default=123, type=int)
 parser.add_argument(
-    '--threshold_ini', default=[0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8], type=list)
+    '--threshold_ini', default=[0.95, 0.95, 0.85, 0.85, 0.7, 0.7, 0.85], type=list)
 parser.add_argument('--batch_size', default=32, type=int)
 parser.add_argument('--num_workers', default=0, type=int)
 parser.add_argument('--lr', default=0.002, type=float)
@@ -58,8 +60,8 @@ parser.add_argument('--num_epochs', default=80, type=int)
 parser.add_argument(
     '--model_ini_path', default='/home/tangb_lab/cse30013027/zmj/checkpoint/model_initial.pth', type=str)
 parser.add_argument('--alpha', default=0.5, type=float)
-parser.add_argument('--lambda_u', default=0, type=float)
 parser.add_argument('--T', default=0.5, type=float)
+parser.add_argument('--resume', default=True, type=bool)
 args = parser.parse_args()
 
 
@@ -157,7 +159,7 @@ def train(epoch, net, net2, optimizer, scaler, labeled_trainloader, unlabeled_tr
                                            * mixed_target, dim=1))
 
                 # regularization
-                prior = torch.ones(args.num_class) / args.num_class
+                prior = torch.tensor(args.prior)
                 prior = prior.cuda()
                 pred_mean = torch.softmax(logits, dim=1).mean(0)
                 penalty = torch.sum(prior * torch.log(prior / pred_mean))
@@ -239,7 +241,7 @@ def eval(epoch, model, eval_loader, model_code):
     loss_dic['4'] = torch.zeros(args.fear_number)
     loss_dic['5'] = torch.zeros(args.disgust_number)
     loss_dic['6'] = torch.zeros(args.anger_number)
-    loss_dic['7'] = torch.zeros(args.contempt_number)
+    # loss_dic['7'] = torch.zeros(args.contempt_number)
     index['0'] = torch.zeros(args.neutral_number)
     index['1'] = torch.zeros(args.happy_number)
     index['2'] = torch.zeros(args.sad_number)
@@ -247,7 +249,7 @@ def eval(epoch, model, eval_loader, model_code):
     index['4'] = torch.zeros(args.fear_number)
     index['5'] = torch.zeros(args.disgust_number)
     index['6'] = torch.zeros(args.anger_number)
-    index['7'] = torch.zeros(args.contempt_number)
+    # index['7'] = torch.zeros(args.contempt_number)
     n = torch.zeros(args.num_class)
     p = 0
     q = 0
@@ -311,8 +313,7 @@ def create_model(path=args.model_ini_path):
     model = models.resnet50()
     model.load_state_dict(torch.load(path))
     # resnet50(weights=ResNet50_Weights.DEFAULT)
-    if path == args.model_ini_path:
-        model.fc = nn.Linear(2048, args.num_class)
+    model.fc = nn.Linear(2048, args.num_class)
     model = nn.DataParallel(model)
     model.to(device)
     return model
@@ -320,11 +321,14 @@ def create_model(path=args.model_ini_path):
 
 print('| Building net')
 net1 = create_model()
-net1.load_state_dict(torch.load(
-    '/home/tangb_lab/cse30013027/zmj/checkpoint/models/model_1(epoch 0).pth'))
+
 net2 = create_model()
-net2.load_state_dict(torch.load(
-    '/home/tangb_lab/cse30013027/zmj/checkpoint/models/model_2(epoch 0).pth'))
+
+if args.resume:
+    net1.load_state_dict(torch.load(
+        '/home/tangb_lab/cse30013027/zmj/checkpoint/models/model_1(epoch 4).pth'))
+    net2.load_state_dict(torch.load(
+        '/home/tangb_lab/cse30013027/zmj/checkpoint/models/model_2(epoch 4).pth'))
 
 
 # define losses here
@@ -332,8 +336,8 @@ net2.load_state_dict(torch.load(
 
 class NegEntropy(object):
     def __call__(self, outputs):
-        probs = torch.softmax(outputs, dim=1)
-        return torch.mean(torch.sum(probs.log() * probs, dim=1))
+        pr = torch.softmax(outputs, dim=1)
+        return torch.mean(torch.sum(pr.log() * pr, dim=1))
 
 
 CE = nn.CrossEntropyLoss(reduction='none')
@@ -366,7 +370,7 @@ loader = dataloader.dataloader(num_class=args.num_class, train_set_path=args.tra
 
 
 loss_paint = np.zeros(args.num_epochs+1)
-for epoch in range(args.num_epochs + 1):
+for epoch in range(5, args.num_epochs + 1):
     print('start epoch' + str(epoch))
     if not os.path.exists("/home/tangb_lab/cse30013027/zmj/checkpoint/images/%s" % str(epoch)):
         os.mkdir("/home/tangb_lab/cse30013027/zmj/checkpoint/images/%s" %
@@ -379,38 +383,37 @@ for epoch in range(args.num_epochs + 1):
     for param_group in optimizer2.param_groups:
         param_group['lr'] = args.lr
 
-    if epoch != 0:
-        if epoch < 5:  # warm up
-            train_loader = loader.run('warm_up')
-            print('Warmup Net1')
-            warm_up(net1, optimizer1, scaler1, train_loader, epoch, 1)
-            train_loader = loader.run('warm_up')
-            print('\nWarmup Net2')
-            warm_up(net2, optimizer2, scaler2, train_loader, epoch, 2)
-        else:
-            # pred1 = (prob1 > threshold_ini)  # divide dataset
-            # pred2 = (prob2 > threshold_ini)
-            pred1 = (prob1 > 0.8)
-            pred2 = (prob2 > 0.8)
+    if epoch < 5:  # warm up
+        train_loader = loader.run('warm_up')
+        print('Warmup Net1')
+        warm_up(net1, optimizer1, scaler1, train_loader, epoch, 1)
+        train_loader = loader.run('warm_up')
+        print('\nWarmup Net2')
+        warm_up(net2, optimizer2, scaler2, train_loader, epoch, 2)
+    else:
+        # evaluate training data loss for next epoch
+        print('\n==== net 1 evaluate next epoch training data loss ====')
+        eval_loader = loader.run('eval')
+        prob1 = eval(epoch, net1, eval_loader, 1)
+        print('\n==== net 2 evaluate next epoch training data loss ====')
+        eval_loader = loader.run('eval')
+        prob2 = eval(epoch, net2, eval_loader, 2)
 
-            print('\n\nTrain Net1')
-            labeled_trainloader, unlabeled_trainloader = loader.run(
-                'train', pred2, prob2)  # co-divide
-            train(epoch, net1, net2, optimizer1, scaler1, labeled_trainloader,
-                  unlabeled_trainloader, 1)  # train net1
-            print('\nTrain Net2')
-            labeled_trainloader, unlabeled_trainloader = loader.run(
-                'train', pred1, prob1)  # co-divide
-            train(epoch, net2, net1, optimizer2, scaler2, labeled_trainloader,
-                  unlabeled_trainloader, 2)  # train net2
+        # pred1 = (prob1 > threshold_ini)  # divide dataset
+        # pred2 = (prob2 > threshold_ini)
+        pred1 = (prob1 > 0.8)
+        pred2 = (prob2 > 0.8)
 
-    # evaluate training data loss for next epoch
-    print('\n==== net 1 evaluate next epoch training data loss ====')
-    eval_loader = loader.run('eval')
-    prob1 = eval(epoch, net1, eval_loader, 1)
-    print('\n==== net 2 evaluate next epoch training data loss ====')
-    eval_loader = loader.run('eval')
-    prob2 = eval(epoch, net2, eval_loader, 2)
+        print('\n\nTrain Net1')
+        labeled_trainloader, unlabeled_trainloader = loader.run(
+            'train', pred2, prob2, args.threshold_ini)  # co-divide
+        train(epoch, net1, net2, optimizer1, scaler1, labeled_trainloader,
+              unlabeled_trainloader, 1)  # train net1
+        print('\nTrain Net2')
+        labeled_trainloader, unlabeled_trainloader = loader.run(
+            'train', pred1, prob1, args.threshold_ini)  # co-divide
+        train(epoch, net2, net1, optimizer2, scaler2, labeled_trainloader,
+              unlabeled_trainloader, 2)  # train net2
 
     test_loader = loader.run('test')
     acc, loss = test(net1, net2, test_loader, epoch)
