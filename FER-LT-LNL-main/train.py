@@ -59,6 +59,7 @@ parser.add_argument('--alpha', default=0.5, type=float)
 parser.add_argument('--T', default=0.5, type=float)
 parser.add_argument('--resume', default=True, type=bool)
 parser.add_argument('--warm_up', default=5, type=bool)
+parser.add_argument('--lambda_u', default=0, type=float)
 args = parser.parse_args()
 
 # set cuda and seed
@@ -93,6 +94,7 @@ def train(epoch, net, net2, optimizer, scaler, labeled_trainloader, unlabeled_tr
                 try:
                     inputs_u, inputs_u2 = next(unlabeled_train_iter)
                 except:
+                    # this is because labeled set may be larger than unlabeled set
                     unlabeled_train_iter = iter(unlabeled_trainloader)
                     inputs_u, inputs_u2 = next(unlabeled_train_iter)
                 batch_size = inputs_x.size(0)
@@ -128,7 +130,6 @@ def train(epoch, net, net2, optimizer, scaler, labeled_trainloader, unlabeled_tr
                     px = (torch.softmax(outputs_x, dim=1) +
                           torch.softmax(outputs_x2, dim=1)) / 2  # co-refinement
                     px = w_x * labels_x + (1 - w_x) * px
-                    print(w_x)
                     ptx = px ** (1 / args.T)  # temparature sharpening
 
                     targets_x = ptx / ptx.sum(dim=1, keepdim=True)  # normalize
@@ -403,7 +404,7 @@ loader = dataloader.dataloader(num_class=args.num_class, train_set_path=args.tra
 
 
 loss_paint = np.zeros(args.num_epochs+1)
-for epoch in range(5, args.num_epochs + 1):
+for epoch in range(4, args.num_epochs + 1):
     print('start epoch' + str(epoch))
     if not os.path.exists("/home/tangb_lab/cse30013027/zmj/checkpoint/images/%s" % str(epoch)):
         os.mkdir("/home/tangb_lab/cse30013027/zmj/checkpoint/images/%s" %
@@ -416,37 +417,38 @@ for epoch in range(5, args.num_epochs + 1):
     for param_group in optimizer2.param_groups:
         param_group['lr'] = args.lr
 
-    if epoch < 5:  # warm up
-        train_loader = loader.run('warm_up')
-        print('Warmup Net1')
-        warm_up(net1, optimizer1, scaler1, train_loader, epoch, 1)
-        train_loader = loader.run('warm_up')
-        print('\nWarmup Net2')
-        warm_up(net2, optimizer2, scaler2, train_loader, epoch, 2)
-    else:
-        # evaluate training data loss for next epoch
-        print('\n==== net 1 evaluate next epoch training data loss ====')
-        eval_loader = loader.run('eval')
-        prob1 = eval(epoch, net1, eval_loader, 1)
-        print('\n==== net 2 evaluate next epoch training data loss ====')
-        eval_loader = loader.run('eval')
-        prob2 = eval(epoch, net2, eval_loader, 2)
+    if epoch > 4:
+        if epoch < 5:  # warm up
+            train_loader = loader.run('warm_up')
+            print('Warmup Net1')
+            warm_up(net1, optimizer1, scaler1, train_loader, epoch, 1)
+            train_loader = loader.run('warm_up')
+            print('\nWarmup Net2')
+            warm_up(net2, optimizer2, scaler2, train_loader, epoch, 2)
+        else:
+            # evaluate training data loss for next epoch
+            print('\n==== net 1 evaluate next epoch training data loss ====')
+            eval_loader = loader.run('eval')
+            prob1 = eval(epoch, net1, eval_loader, 1)
+            print('\n==== net 2 evaluate next epoch training data loss ====')
+            eval_loader = loader.run('eval')
+            prob2 = eval(epoch, net2, eval_loader, 2)
 
-        # pred1 = (prob1 > threshold_ini)  # divide dataset
-        # pred2 = (prob2 > threshold_ini)
-        pred1 = (prob1 > 0.8)
-        pred2 = (prob2 > 0.8)
+            # pred1 = (prob1 > threshold_ini)  # divide dataset
+            # pred2 = (prob2 > threshold_ini)
+            pred1 = (prob1 > 0.8)
+            pred2 = (prob2 > 0.8)
 
-        print('\n\nTrain Net1')
-        labeled_trainloader, unlabeled_trainloader = loader.run(
-            'train', pred2, prob2, args.threshold_ini)  # co-divide
-        train(epoch, net1, net2, optimizer1, scaler1, labeled_trainloader,
-              unlabeled_trainloader, 1)  # train net1
-        print('\nTrain Net2')
-        labeled_trainloader, unlabeled_trainloader = loader.run(
-            'train', pred1, prob1, args.threshold_ini)  # co-divide
-        train(epoch, net2, net1, optimizer2, scaler2, labeled_trainloader,
-              unlabeled_trainloader, 2)  # train net2
+            print('\n\nTrain Net1')
+            labeled_trainloader, unlabeled_trainloader = loader.run(
+                'train', pred2, prob2, args.threshold_ini)  # co-divide
+            train(epoch, net1, net2, optimizer1, scaler1, labeled_trainloader,
+                  unlabeled_trainloader, 1)  # train net1
+            print('\nTrain Net2')
+            labeled_trainloader, unlabeled_trainloader = loader.run(
+                'train', pred1, prob1, args.threshold_ini)  # co-divide
+            train(epoch, net2, net1, optimizer2, scaler2, labeled_trainloader,
+                  unlabeled_trainloader, 2)  # train net2
 
     test_loader = loader.run('test')
     acc, loss = test(net1, net2, test_loader, epoch)
