@@ -13,15 +13,18 @@ import os
 from tqdm import tqdm
 import argparse
 
+# define the hyperparameters
+parser = argparse.ArgumentParser(description='PyTorch AffectNet Training')
 
-parser = argparse.ArgumentParser(description='PyTorch CIFAR Training')
 parser.add_argument('--num_class', default=7, type=int)
+
 parser.add_argument('--train_set_path',
                     default='/home/tangb_lab/cse30013027/Data/AffectNet/aligned_affectnet_train.csv', type=str)
 parser.add_argument('--validation_set_path',
                     default='/home/tangb_lab/cse30013027/Data/AffectNet/aligned_affectnet_test.csv', type=str)
 parser.add_argument('--image_path_prefix',
                     default='/home/tangb_lab/cse30013027/Data/AffectNet/Manually_Annotated_Images_AffectNet', type=str)
+
 parser.add_argument('--train_number', default=282406, type=int)
 parser.add_argument('--neutral_number', default=74495, type=int)
 parser.add_argument('--happy_number', default=133756, type=int)
@@ -30,20 +33,12 @@ parser.add_argument('--surprise_number', default=14016, type=int)
 parser.add_argument('--fear_number', default=6322, type=int)
 parser.add_argument('--disgust_number', default=3783, type=int)
 parser.add_argument('--anger_number', default=24725, type=int)
-parser.add_argument('--contempt_number', default=3734, type=int)
+# parser.add_argument('--contempt_number', default=3734, type=int)
 parser.add_argument('--validation_number', default=3498, type=int)
+
 parser.add_argument(
     '--prior', default=[0.2638, 0.4736, 0.0896, 0.0496, 0.0224, 0.014, 0.0875], type=list)
-# parser.add_argument('--train_number', default=797, type=int)
-# parser.add_argument('--neutral_number', default=216, type=int)
-# parser.add_argument('--happy_number', default=368, type=int)
-# parser.add_argument('--sad_number', default=70, type=int)
-# parser.add_argument('--surprise_number', default=49, type=int)
-# parser.add_argument('--fear_number', default=13, type=int)
-# parser.add_argument('--disgust_number', default=13, type=int)
-# parser.add_argument('--anger_number', default=68, type=int)
-# # parser.add_argument('--contempt_number', default=3, type=int)
-# parser.add_argument('--validation_number', default=350, type=int)
+
 parser.add_argument('--resize', default=256, type=int)
 parser.add_argument('--crop', default=224, type=int)
 parser.add_argument(
@@ -55,6 +50,7 @@ parser.add_argument(
     '--threshold_ini', default=[0.95, 0.95, 0.85, 0.85, 0.7, 0.7, 0.85], type=list)
 parser.add_argument('--batch_size', default=32, type=int)
 parser.add_argument('--num_workers', default=0, type=int)
+
 parser.add_argument('--lr', default=0.002, type=float)
 parser.add_argument('--num_epochs', default=80, type=int)
 parser.add_argument(
@@ -62,9 +58,10 @@ parser.add_argument(
 parser.add_argument('--alpha', default=0.5, type=float)
 parser.add_argument('--T', default=0.5, type=float)
 parser.add_argument('--resume', default=True, type=bool)
+parser.add_argument('--warm_up', default=5, type=bool)
 args = parser.parse_args()
 
-
+# set cuda and seed
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 random.seed(args.seed)
 torch.manual_seed(args.seed)
@@ -85,8 +82,10 @@ def train(epoch, net, net2, optimizer, scaler, labeled_trainloader, unlabeled_tr
     net2.eval()  # fix one network and train the other
 
     unlabeled_train_iter = iter(unlabeled_trainloader)
+
     num_iter = (len(labeled_trainloader.dataset) // args.batch_size) + 1
-    loss_plot = np.zeros(num_iter)
+    loss_plot = np.zeros(num_iter)  # for plot
+
     with torch.cuda.amp.autocast():
         with tqdm(total=len(labeled_trainloader)) as pbar:
             for batch_idx, (inputs_x, inputs_x2, labels_x, w_x) in enumerate(labeled_trainloader):
@@ -116,7 +115,7 @@ def train(epoch, net, net2, optimizer, scaler, labeled_trainloader, unlabeled_tr
 
                     pu = (torch.softmax(outputs_u11, dim=1) + torch.softmax(outputs_u12, dim=1) + torch.softmax(outputs_u21,
                                                                                                                 dim=1) + torch.softmax(
-                        outputs_u22, dim=1)) / 4
+                        outputs_u22, dim=1)) / 4  # co-guessing
                     ptu = pu ** (1 / args.T)  # temparature sharpening
 
                     targets_u = ptu / ptu.sum(dim=1, keepdim=True)  # normalize
@@ -127,8 +126,9 @@ def train(epoch, net, net2, optimizer, scaler, labeled_trainloader, unlabeled_tr
                     outputs_x2 = net(inputs_x2)
 
                     px = (torch.softmax(outputs_x, dim=1) +
-                          torch.softmax(outputs_x2, dim=1)) / 2
+                          torch.softmax(outputs_x2, dim=1)) / 2  # co-refinement
                     px = w_x * labels_x + (1 - w_x) * px
+                    print(w_x)
                     ptx = px ** (1 / args.T)  # temparature sharpening
 
                     targets_x = ptx / ptx.sum(dim=1, keepdim=True)  # normalize
@@ -154,9 +154,11 @@ def train(epoch, net, net2, optimizer, scaler, labeled_trainloader, unlabeled_tr
                                             2] + (1 - l) * target_b[:batch_size * 2]
 
                 logits = net(mixed_input)
+                logits_x = logits[:batch_size*2]
+                logits_u = logits[batch_size*2:]
 
-                Lx = -torch.mean(torch.sum(F.log_softmax(logits, dim=1)
-                                           * mixed_target, dim=1))
+                Lx, Lu, lamb = criterion(
+                    logits_x, mixed_target[:batch_size*2], logits_u, mixed_target[batch_size*2:], epoch+batch_idx/num_iter, args.warm_up)
 
                 # regularization
                 prior = torch.tensor(args.prior)
@@ -164,7 +166,8 @@ def train(epoch, net, net2, optimizer, scaler, labeled_trainloader, unlabeled_tr
                 pred_mean = torch.softmax(logits, dim=1).mean(0)
                 penalty = torch.sum(prior * torch.log(prior / pred_mean))
 
-                loss = Lx + penalty
+                loss = Lx + lamb * Lu + penalty
+
                 loss_plot[batch_idx] = loss
 
                 # compute gradient and do SGD step
@@ -172,7 +175,8 @@ def train(epoch, net, net2, optimizer, scaler, labeled_trainloader, unlabeled_tr
                 scaler.scale(loss).backward()
                 scaler.step(optimizer)
                 scaler.update()
-    plotter.plot_train_loss(loss_plot, epoch, model_code)
+
+    plotter.plot_train_loss(loss_plot, epoch, model_code)  # plot
 
 
 def warm_up(net, optimizer, scaler, dataloader, epoch, model_code):
@@ -231,9 +235,12 @@ def test(net1, net2, test_loader, epoch):
 
 def eval(epoch, model, eval_loader, model_code):
     model.eval()
-    losses = torch.zeros(args.train_number)
-    loss_dic = {}
-    index = {}
+
+    losses = torch.zeros(args.train_number)  # the loss for all samples
+
+    loss_dic = {}  # the loss for samples of each class
+    index = {}  # the idx for samples of each class
+
     loss_dic['0'] = torch.zeros(args.neutral_number)
     loss_dic['1'] = torch.zeros(args.happy_number)
     loss_dic['2'] = torch.zeros(args.sad_number)
@@ -250,9 +257,10 @@ def eval(epoch, model, eval_loader, model_code):
     index['5'] = torch.zeros(args.disgust_number)
     index['6'] = torch.zeros(args.anger_number)
     # index['7'] = torch.zeros(args.contempt_number)
-    n = torch.zeros(args.num_class)
-    p = 0
-    q = 0
+
+    n = torch.zeros(args.num_class)  # the tail of loss_dic and index
+    p = 0  # currently pointed sample's idx
+
     with torch.no_grad():
         with torch.cuda.amp.autocast():
             with tqdm(total=len(eval_loader)) as pbar:
@@ -267,33 +275,43 @@ def eval(epoch, model, eval_loader, model_code):
                         index[str(int(targets[b].detach().cpu().numpy()))
                               ][n[targets[b].detach().cpu().numpy()].detach().cpu().numpy()] = p
                         n[targets[b].detach().cpu().numpy()] += 1
+                        losses[p] = loss[b]
                         p += 1
-                        losses[q] = loss[b]
-                        q += 1
 
-    prob_total = torch.zeros(args.train_number)
+    prob_total = torch.zeros(args.train_number)  # the probability to return
+
     for i in range(args.num_class):
         loss = loss_dic[str(i)]
         idx = index[str(i)]
-        loss = (loss - losses.min()) / (losses.max() - losses.min())
+
+        # for plot and compare with other classes
+        loss_p = (loss - losses.min()) / (losses.max() - losses.min())
+        # for gmm fit
+        loss = (loss - loss.min()) / (loss.max() - loss.min())
+
+        loss_p = loss_p.reshape(-1, 1)
         loss = loss.reshape(-1, 1)
-        loss_plot = np.zeros(101)
-        for j in range(len(loss)):
-            loss_plot[(int)(loss[j]*100)] += 1
-        plotter.plot_loss_num(loss_plot, epoch, i, model_code)
+
         gmm = GaussianMixture(n_components=2, max_iter=10,
                               reg_covar=5e-4, tol=1e-2)
         gmm.fit(loss)
         prob = gmm.predict_proba(loss)
         prob = prob[:, gmm.means_.argmin()]
-        for j in range(len(loss)):
-            prob_total[int(idx[j].detach().cpu().numpy())] = prob[j]
+
+        loss_plot = np.zeros(101)
         prob_plot = np.zeros(101)
         for j in range(len(prob)):
+            loss_plot[(int)(loss_p[j]*100)] += 1
             prob_plot[(int)(prob[j]*100)] += 1
+
+            prob_total[int(idx[j].detach().cpu().numpy())
+                       ] = prob[j]  # write the prob back
+
+        plotter.plot_loss_num(loss_plot, epoch, i, model_code)
         plotter.plot_prob_num(prob_plot, epoch, i, model_code)
 
-    losses = (losses - losses.min()) / (losses.max() - losses.min())
+    losses = (losses - losses.min()) / \
+        (losses.max() - losses.min())  # plot all samples
     losses = losses.reshape(-1, 1)
     loss_plot = np.zeros(101)
     for i in range(len(losses)):
@@ -332,6 +350,20 @@ if args.resume:
 
 
 # define losses here
+def linear_rampup(current, warm_up, rampup_length=16):
+    current = np.clip((current-warm_up) / rampup_length, 0.0, 1.0)
+    return args.lambda_u*float(current)
+
+
+class SemiLoss(object):
+    def __call__(self, outputs_x, targets_x, outputs_u, targets_u, epoch, warm_up):
+        probs_u = torch.softmax(outputs_u, dim=1)
+
+        Lx = -torch.mean(torch.sum(F.log_softmax(outputs_x,
+                         dim=1) * targets_x, dim=1))
+        Lu = torch.mean((probs_u - targets_u)**2)
+
+        return Lx, Lu, linear_rampup(epoch, warm_up)
 
 
 class NegEntropy(object):
@@ -343,6 +375,7 @@ class NegEntropy(object):
 CE = nn.CrossEntropyLoss(reduction='none')
 CEloss = nn.CrossEntropyLoss()
 conf_penalty = NegEntropy()
+criterion = SemiLoss()
 
 
 # define optimizers here
