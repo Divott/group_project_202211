@@ -38,11 +38,14 @@ class dataset(Dataset):
                 pred[i] = prob[i] >= thre[self.train_labels[i]]
             pred_idx = pred.nonzero()[0]
             self.train_imgs = [train_imgs[i] for i in pred_idx]
+            self.train_labels= [self.train_labels[i] for i in pred_idx]
             self.prob = [prob[i] for i in pred_idx]
             print("%s data has a size of %d" %
                   (self.mode, len(self.train_imgs)))
         elif self.mode == "unlabeled":
             train_imgs = df_train['subDirectory_filePath'].values.flatten()
+            for i in range(train_number):
+                pred[i] = prob[i] >= thre[self.train_labels[i]]
             pred_idx = (1 - pred).nonzero()[0]
             self.train_imgs = [train_imgs[i] for i in pred_idx]
             print("%s data has a size of %d" %
@@ -54,7 +57,7 @@ class dataset(Dataset):
         if self.mode == 'labeled':
             img_path = self.image_path_prefix + '/' + self.train_imgs[index]
             target = self.train_labels[index]
-            w = self.prob[index]
+            ws = self.prob[index]
             image = Image.open(img_path).convert('RGB')
             x = self.x_train[index]
             y = self.y_train[index]
@@ -63,7 +66,7 @@ class dataset(Dataset):
             image = image.crop((x, y, x + w, y + h))
             img1 = self.transform(image)
             img2 = self.transform(image)
-            return img1, img2, target, w
+            return img1, img2, target, ws
         elif self.mode == 'unlabeled':
             img_path = self.image_path_prefix + '/' + self.train_imgs[index]
             image = Image.open(img_path).convert('RGB')
@@ -135,7 +138,7 @@ class dataloader():
         ])
         # maybe there are other kinds of transforms waited to be added
 
-    def run(self, mode, pred=[], prob=[]):
+    def run(self, mode, pred=[], prob=[], thre=[]):
         if mode == 'warm_up':
             warm_up_dataset = dataset(mode='all', transform=self.transform_train,
                                       num_class=self.num_class, train_set_path=self.train_set_path,
@@ -153,7 +156,7 @@ class dataloader():
                                       num_class=self.num_class, train_set_path=self.train_set_path,
                                       validation_set_path=self.validation_set_path,
                                       image_path_prefix=self.image_path_prefix,
-                                      train_number=self.train_number, validation_number=self.validation_number, pred=pred, prob=prob)
+                                      train_number=self.train_number, validation_number=self.validation_number, pred=pred, prob=prob, thre=thre)
             labeled_loader = DataLoader(
                 dataset=labeled_dataset,
                 batch_size=self.batch_size,
@@ -163,7 +166,7 @@ class dataloader():
                                         num_class=self.num_class, train_set_path=self.train_set_path,
                                         validation_set_path=self.validation_set_path,
                                         image_path_prefix=self.image_path_prefix,
-                                        train_number=self.train_number, validation_number=self.validation_number, pred=pred)
+                                        train_number=self.train_number, validation_number=self.validation_number, pred=pred, prob=prob, thre=thre)
             unlabeled_loader = DataLoader(
                 dataset=unlabeled_dataset,
                 batch_size=self.batch_size,

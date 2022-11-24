@@ -43,7 +43,7 @@ def plot_train_loss(train_loss: np.array, epoch: int, model_code: int):
     plt.title("Train loss in epoch %s(net %s)" % (str(epoch), str(model_code)))
     plt.xlabel("Steps")
     plt.ylabel("Loss")
-    plt.savefig("/home/tangb_lab/cse30013027/zmj/checkpoint/images/%s/Train loss in epoch %s(net %s).png" %
+    plt.savefig("images/%s/Train loss in epoch %s(net %s).png" %
                 (str(epoch), str(epoch), str(model_code)))
     # plt.savefig('test_plotter.png')
     plt.close()
@@ -62,7 +62,7 @@ def plot_test_loss(test_loss: np.array):
     plt.xlabel("Epoch")
     plt.ylabel("Loss")
     plt.savefig(
-        "/home/tangb_lab/cse30013027/zmj/checkpoint/images/Test loss.png")
+        "images/Test loss.png")
     # plt.savefig('test_plotter.png')
     plt.close()
 
@@ -74,14 +74,16 @@ def plot_test_loss(test_loss: np.array):
 
 
 def plot_confusion_matrix(confusion_matrix: np.array, epoch: int):
+    # exp_classes = ['Neutral', 'Happy', 'Sad', 'Surprise',
+    #                'Fear', 'Disgust', 'Anger', 'Contempt']
     exp_classes = ['Neutral', 'Happy', 'Sad', 'Surprise',
-                   'Fear', 'Disgust', 'Anger', 'Contempt']
+                   'Fear', 'Disgust', 'Anger']
     df_cm = pd.DataFrame(confusion_matrix, index=exp_classes,
                          columns=exp_classes)
     plt.figure()
     plt.title("Confusion matrix in epoch %s" % str(epoch))
     sn.heatmap(df_cm, annot=True, fmt='g')
-    plt.savefig("/home/tangb_lab/cse30013027/zmj/checkpoint/images/%s/Confusion matrix in epoch %s.png" %
+    plt.savefig("images/%s/Confusion matrix in epoch %s.png" %
                 (str(epoch), str(epoch)))
     # plt.savefig('test_plotter.png')
     plt.close()
@@ -96,8 +98,10 @@ def plot_confusion_matrix(confusion_matrix: np.array, epoch: int):
 
 def plot_loss_num(loss_num: np.array, epoch: int, cls: int, model_code: int):
     # loss_num = (loss - loss_min) / (loss_max - loss_min), the distribution is divided by 1%
+    # exp_classes = ['Neutral', 'Happy', 'Sad', 'Surprise',
+    #                'Fear', 'Disgust', 'Anger', 'Contempt', 'All']
     exp_classes = ['Neutral', 'Happy', 'Sad', 'Surprise',
-                   'Fear', 'Disgust', 'Anger', 'Contempt', 'All']
+                   'Fear', 'Disgust', 'Anger', 'All']
     indices = np.arange(101)
     plt.bar(indices, loss_num, color='maroon',
             width=0.8)
@@ -105,7 +109,7 @@ def plot_loss_num(loss_num: np.array, epoch: int, cls: int, model_code: int):
     plt.ylabel("Total number")
     plt.title("Num-loss(%s) in epoch %s(net %s)" %
               (exp_classes[cls], str(epoch), str(model_code)))
-    plt.savefig("/home/tangb_lab/cse30013027/zmj/checkpoint/images/%s/Num-loss(%s) in epoch %s(net %s).png" %
+    plt.savefig("images/%s/Num-loss(%s) in epoch %s(net %s).png" %
                 (str(epoch), exp_classes[cls], str(epoch), str(model_code)))
     # plt.savefig('test_plotter.png')
     plt.close()
@@ -118,8 +122,10 @@ def plot_loss_num(loss_num: np.array, epoch: int, cls: int, model_code: int):
 
 
 def plot_prob_num(prob_num: np.array, epoch: int, cls: int, model_code: int):
+    # exp_classes = ['Neutral', 'Happy', 'Sad', 'Surprise',
+    #                'Fear', 'Disgust', 'Anger', 'Contempt', 'All']
     exp_classes = ['Neutral', 'Happy', 'Sad', 'Surprise',
-                   'Fear', 'Disgust', 'Anger', 'Contempt', 'All']
+                   'Fear', 'Disgust', 'Anger',  'All']
     indices = np.arange(101)
     plt.bar(indices, prob_num, color='maroon',
             width=0.4)
@@ -127,7 +133,7 @@ def plot_prob_num(prob_num: np.array, epoch: int, cls: int, model_code: int):
     plt.ylabel("Total number")
     plt.title("Num-prob(%s) in epoch %s(net %s)" %
               (exp_classes[cls], str(epoch), str(model_code)))
-    plt.savefig("/home/tangb_lab/cse30013027/zmj/checkpoint/images/%s/Num-prob(%s) in epoch %s(net %s).png" %
+    plt.savefig("images/%s/Num-prob(%s) in epoch %s(net %s).png" %
                 (str(epoch), exp_classes[cls], str(epoch), str(model_code)))
     # plt.savefig('test_plotter.png')
     plt.close()
