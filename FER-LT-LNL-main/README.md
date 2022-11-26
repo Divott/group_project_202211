@@ -1,0 +1,3 @@
+# FER-LT-LNL
+#### Facial expression recognition (FER) has a wide research prospect in human-computer interaction and emotion computing, including human-computer interaction, emotion analysis, intelligent security, entertainment, online education, intelligent medical care, etc.
+#### Data bias and inconsistent labels are very common among different facial expression datasets due to different collecting conditions and the subjectiveness of labeling. In addition, FER also suffered from the problem of imbalanced class distrbution. Our project aims to address FER's noisy labels and class imbalance challenges.
