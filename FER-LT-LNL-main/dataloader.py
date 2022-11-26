@@ -85,6 +85,11 @@ class dataset(Dataset):
             self.train_imgs = pd.array(self.train_imgs)
             self.test_imgs = pd.array(self.test_imgs)
 
+        print(self.train_labels)
+        print(self.train_imgs)
+        print(self.test_labels)
+        print(self.test_imgs)
+
     def __getitem__(self, index):
         if self.mode == 'labeled':
             img_path = self.image_path_prefix + '/' + self.train_imgs[index]

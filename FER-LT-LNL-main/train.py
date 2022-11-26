@@ -96,9 +96,8 @@ if use_Aff:
     parser.add_argument(
         '--model_ini_path', default='/home/tangb_lab/cse30013027/zmj/checkpoint/model_initial.pth', type=str)
 else:
-    # this is for RAF-DB
     parser.add_argument(
-        '--model_ini_path', default='/home/tangb_lab/cse30013027/zmj/checkpoint/resnet18_msceleb.pth', type=str)
+        '--model_ini_path', default='/home/tangb_lab/cse30013027/zmj/checkpoint/18.pth', type=str)
 
 parser.add_argument('--alpha', default=0.1, type=float)
 parser.add_argument('--T', default=0.5, type=float)
@@ -258,8 +257,8 @@ def warm_up(net, optimizer, scaler, dataloader, epoch, model_code):
                 optimizer.zero_grad()
                 outputs = net(inputs)
                 loss = CEloss(outputs, labels)
-                # penalty = conf_penalty(outputs)
-                L = loss  # + penalty
+                penalty = conf_penalty(outputs)
+                L = loss + penalty
                 loss_plot[batch_idx] = L
                 scaler.scale(L).backward()
                 scaler.step(optimizer)
@@ -399,19 +398,15 @@ cudnn.benchmark = True
 
 def create_model(path=args.model_ini_path):
     if use_Aff:
-        # this is for AffectNet
         model = models.resnet50()
     else:
-        # this is for RAF-DB
         model = models.resnet18()
 
     model.load_state_dict(torch.load(path))
 
     if use_Aff:
-        # this is for AffectNet
         model.fc = nn.Linear(2048, args.num_class)
     else:
-        # this is for RAF-DB
         model.fc = nn.Linear(512, args.num_class)
 
     # model = nn.DataParallel(model)
