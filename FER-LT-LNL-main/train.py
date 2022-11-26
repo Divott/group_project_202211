@@ -258,8 +258,8 @@ def warm_up(net, optimizer, scaler, dataloader, epoch, model_code):
                 optimizer.zero_grad()
                 outputs = net(inputs)
                 loss = CEloss(outputs, labels)
-                penalty = conf_penalty(outputs)
-                L = loss + penalty
+                # penalty = conf_penalty(outputs)
+                L = loss  # + penalty
                 loss_plot[batch_idx] = L
                 scaler.scale(L).backward()
                 scaler.step(optimizer)
